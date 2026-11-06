@@ -117,6 +117,42 @@ Applied (all verified live):
 Result: **442 MB available** (was 369). GPU change needs a gameplay test
 before being baked into the service.
 
+### v28: the background janitor + runtime tuning (in the service, every boot)
+
+Kernel sysctls reset each boot, so the service re-applies:
+
+| Tuning | Value | Fallback |
+|---|---|---|
+| `vm.swappiness` | 100 (push anon pages into compressed zram) | 60 |
+| SD `read_ahead_kb` | 512 (ROM streaming) | 128 |
+| `queue/iostats` | 0 (less write overhead) | 1 |
+| GPU `max_freq` | 600 MHz | 520000000 |
+| UI animation scales | 0.5 | 1.0 |
+
+**Janitor, every 40 s:** `am kill-all` (kills only cached processes — games,
+the frontend, adb and foreground services are untouched) plus a full
+`am force-stop` of Thorium/VLC **only when they are not the foreground
+activity**. Syncthing is deliberately excluded — it must run in the background
+to sync; stop it by hand when unwanted.
+
+**Game mode toggle** (`/data/local/tmp/gamemode` / `gamemode-off`): pins the
+CPU floor at 1.008 GHz so cores never ramp from idle mid-game; GPU already at
+600 MHz max. Revert = floor back to 408 MHz.
+
+**zram:** comp_algorithm shows `lzo lzo-rle [lz4]` — **already lz4** (the
+bracketed algorithm is active). The right low-RAM lever is swappiness, not the
+compressor.
+
+### Edge-tech tips not yet applied (with fallbacks)
+
+- **LMK tuning** via `/vendor/build.prop` (`ro.lmk.kill_heaviest_task=true`, …)
+  — makes the out-of-memory killer take the biggest cached app first. Needs a
+  reboot to test; remove the line if the launcher ever gets killed wrongly.
+- **zram writeback** to SD (backing device) — complex, wears the card, skip.
+- **CPU governor `performance` during games** — more heat (SoC already 62 °C
+  idle-charging); the schedutil + 1 GHz floor in game mode is the better
+  trade here.
+
 App inventory (23 third-party): emulators (PPSSPP/Flycast/EasyRPG/RetroArch/
 Mupen64+/Lemuroid), frontend (Daijishō), tools (Magisk, Droid-ify, NewPipe,
 Limelight for streaming, Syncthing for ROM sync, VLC, Thorium browser —
