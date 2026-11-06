@@ -300,3 +300,19 @@ rebooted; getevent now shows 013d/013e on stick pushes; boot clean (38s,
 panel cycle ok). Backup of the previous DTB at /data/local/tmp/dtb-backup.
 Note: /mnt is tmpfs — mountpoints created in one boot do not exist after
 reboot (this is why the post-reboot cmp printed a false "mismatch").
+
+## v29 CONFIRMED — mouse mode works (2026-11-06 23:23)
+Live capture with the user holding the chords:
+  joyMouse(586): "mouse mode on (toggle chord)"
+  EventHub: New device event4 name='joyMouse' (virtual pointer, sources=0x2002)
+  ModeToastReceiver ran (toast shown), then mode off ~22s later (second chord)
+The joyMouse engine (/system/bin/joyMouse, init service, runs as root since
+boot) reads /dev/input directly watching BUTTON_THUMBL/BUTTON_THUMBR evdev
+codes — our v29 kernel codes (317/318) are exactly what it wants. No keylayout
+file needed. Engine details: grabs the pad only while mouse mode is on,
+reads /proc/device-tree/odroidgo3-joypad/andr36oid,missing-buttons (ours = "fn",
+correct: this board lacks only the FN button), config via persist.sys.joymouse.*
+props (none set = defaults), chord must be held ~2s, "toggle chord ignored:
+a stick is being pushed" means sticks must be centered when pressing.
+L3+R3 and SELECT+START both pressed during the window — both appear valid
+chords (settings UI offers picker).
