@@ -33,7 +33,8 @@ fixed by an automatic sleep/wake cycle in a boot service. Boot completes in
 | [05-wifi.md](05-wifi.md) | RTL8723BU/rtl8xxxu quirks, WPA2 forcing, regdomain, power-save, real-world limits |
 | [06-android-internals.md](06-android-internals.md) | init/zygote timings, the vendor service pattern, root-command daemon, boot speed levers |
 | [07-methods-and-tools.md](07-methods-and-tools.md) | Card-surgery rules, adb tooling, pstore/dmesg reading, DTB compile flow |
-| [08-validation-log.md](08-validation-log.md) | Condensed version history v9 → v27 with what each proved |
+| [08-validation-log.md](08-validation-log.md) | Condensed version history v9 → v32 with what each proved |
+| [09-remote-play.md](09-remote-play.md) | Moonlight + Sunshine + Tailscale: full remote Steam setup, installed and working |
 | [service/](service/) | The production boot service (`diag.sh` v27 + init rc) |
 | [tools/](tools/) | `rk817tool.c` (raw PMIC i2c) and `wifitool.c` (nl80211, no libnl) |
 | [dts/](dts/) | The production Android device tree for the board |

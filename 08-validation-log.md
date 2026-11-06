@@ -347,3 +347,15 @@ right-Y flip other handhelds need (our board: kernel-side polarity fix instead
 so the flip stays off); "toggle chord ignored: a stick is being pushed" = chord
 needs centered sticks; config = persist.sys.joymouse.* read live (PropertyWatcher
 waits on the property serial).
+
+## v32 (2026-11-07) — Tailscale + remote play stack
+- tailscaled (anasfanani/tailscale-android-cli v1.98.8-android, aarch64 static,
+  6.3MB) at /data/local/tmp/ts/, CLI via symlink multicall
+- /dev/tun present and usable by root -> full VPN mode --tun=tun0
+- console joined the user's tailnet: the console 100.x.x.x
+- ping to the PC 100.x.x.x: 0% loss (relayed ~130ms across networks;
+  direct connects are LAN-fast when both ends share a network)
+- service v32: tailscaled autostart (state-authenticated -> reconnects on boot)
+  + janitor keep-alive; installed to /vendor live
+- Moonlight v12.1 already preinstalled (com.limelight); stack = Moonlight +
+  Sunshine (PC) + Tailscale. PyroWave reference noted (Adreno/LAN-only, later).
