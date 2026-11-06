@@ -98,6 +98,34 @@ Candidates for the performance phase:
 - keep zram (helps on 1 GB),
 - do **not** touch zygote preload without a full test cycle.
 
+## Performance phase (Nov 2026)
+
+Baseline (idle, charging, launcher up): 975 MB RAM / **369 MB available**;
+51 init services; 191 packages; CPU schedutil 408–1296 MHz; GPU Mali-G31
+`simple_ondemand` **policy-capped at 520 MHz** (600 MHz OPP exists!); SoC 62 °C.
+
+Applied (all verified live):
+
+| Change | Effect |
+|---|---|
+| `am kill-all` (drop cached helper apps) | +66 MB available instantly |
+| `device_config put activity_manager max_cached_processes 12` | keeps cached-process count down (default 32) |
+| disabled `vendor.thermal-hal-2-0-mock` (rename its rc) | fake-data HAL gone; real thermal is kernel-side (`soc-thermal`, `gpu-thermal` zones) |
+| `echo 600000000 > /sys/class/devfreq/ff400000.gpu/max_freq` | GPU unlocked to the stock-firmware 600 MHz gaming clock (idle stays 520, ramps on load) |
+| force-stop `org.videolan.vlc` PlaybackService | +18 MB PSS |
+
+Result: **442 MB available** (was 369). GPU change needs a gameplay test
+before being baked into the service.
+
+App inventory (23 third-party): emulators (PPSSPP/Flycast/EasyRPG/RetroArch/
+Mupen64+/Lemuroid), frontend (Daijishō), tools (Magisk, Droid-ify, NewPipe,
+Limelight for streaming, Syncthing for ROM sync, VLC, Thorium browser —
+341 MB of /data, the biggest item).
+
+Boot-speed levers left: package trim (PMS scan 4.3 s @ 191 pkgs), vendor HAL
+trim (`memtrack`, remaining mocks). Zygote preload trim is framework surgery —
+skip. f2fs options already good (`lazytime,noatime,flush_merge`).
+
 ## Dual zygote / no GApps
 
 The build keeps dual zygote (32+64) and ships no Google Apps — keep both
