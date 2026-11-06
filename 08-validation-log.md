@@ -1,37 +1,302 @@
-# 08 — Validation log (condensed, v9 → v27)
+# DTS compile validation — 2026-11-05
 
-Full history lives in the porting workspace (`device-work/kernel/VALIDATION.md`);
-this is the condensed, self-contained version. Each version = a DTS + service
-pair validated on hardware.
+## Method
+- Toolchain: host cpp (preprocessor) + dtc, against the real andr36oid kernel
+  include tree (`android_kernel_gameconsole_r36s` @ lineage-18.1, shallow sparse
+  clone at /tmp/opencode/kernel-src).
+- Control: `rk3326-r46h-android.dts` (upstream known-good) compiled with the
+  exact same pipeline. Both compile clean.
 
-| Ver | What it proved / changed |
-|---|---|
-| v9–v12 | early bring-up: display pipeline, orientation, buttons/sticks, battery gauge verified against the stock RetroOZ boot log (ground truth: hub `05e3:0608` + dongle `0bda:b720` enumerate on dwc2) |
-| v13 | captured the charger-driver behavior: with the phy enabled, the phy fires `EXTCON_USB_VBUS_EN`, charger sets `otg_in=1` and disables its plug IRQs — the seed of the final explanation |
-| v15 | dwc2 phyless probe timing: keep `phys=<&u2phy_otg>` with the port disabled → lookup defers until UTMI clock, then `-ENODEV` → phyless probe with clock running. Removing `phys` outright = `dwc2_core_reset: HANG!`, probe -16 |
-| v18/v19 | latch discovery: kernel writes never reach the OTG rail (register cache lies); raw i2c `0xB4=0x47` works; latch survives warm reboot, resets on cold power-off; `rk817tool` born |
-| v20 | Wi-Fi from battery on every cold boot achieved; radio tuning (`wifitool ps-off`, `reg MA`) + 30 s watchdog |
-| v21 | deleted `dc_det_gpio` to fix the false "charging" icon → **broke charging entirely** (reverted; lesson: dc_det enables the charge path) |
-| v23 | first production image; BT verified; WPA2-force method for mixed networks |
-| v24 | "charger-aware" service — **wrong model** (assumed separate nets); charging-while-off verified by user; false icon explained as self-sensing loop |
-| v25 | charger-driver unbind for honest icon; wifi watchdog for hub-loss recovery; still wrong model |
-| **v26** | **THE corrected design**: stock topology (`u2phy_otg` disabled, dwc2 phyless-with-phys, dc_det intact) + unconditional latch + watchdog. **Charging + Wi-Fi simultaneously verified live** (`Charging 3.899 V +869 mA`, `usbdevs=8`, `wlan0` up). Boot-time detail: charger present at boot feeds the hub before the latch is needed |
-| v27 | boot black screen fixed: auto sleep/wake cycle after `boot_completed` (panel comes up by itself — user confirmed zero button presses) + `nobootanimation=1` → ready at 51.1 s (was 62.9 s), boot_completed ~48 s. Screen alive ~66 s (v28 will move it right after boot_completed ~52 s) |
+## Results
+| Check | Expected | Compiled DTB | Verdict |
+|---|---|---|---|
+| panel compatible | elida,kd50t048a | ✓ | OK |
+| dsi,lanes | 2 (go3 panel!) | 2 | OK |
+| dsi,flags | VIDEO(1)+BURST(2)+LPM(0x800) = 0x803 | 0x803 | OK (R46H control = 0xa03, has EOT) |
+| panel reset | gpio3 PC0 active-low (kern.log gpio 112) | <gpio3 16 1> | OK |
+| timings | 480x854 @ 27.5 MHz, hfp2 hs10 hbp2 vfp12 vs2 vbp60 | ✓ | OK |
+| backlight | 251 levels, default 125, pwm1 40000ns | ✓ | OK |
+| joypad | invert-absx/absy (base) + invert-absrx + missing fn | ✓ | OK |
+| battery | 4000 mAh (0xfa0), qmax 4020 (0xfb4), go3 OCV table | ✓ | OK (table verified hex→dec by script) |
+| charger | 2000 mA / 4200 mV / finish 300, bat_low_gpio deleted | ✓ | OK |
+| leds | heartbeat kept, charge gpio0 PB5 added, vibrator deleted | ✓ (0 vibrator refs) | OK |
+| second card slot | disabled like R46H | ✓ | OK |
 
-## Open items (as of v27)
+## Files
+- Source: `device-work/kernel/rk3326-rgb10max2-android.dts`
+- Compiled: `device-work/kernel/rk3326-rgb10max2-android.dtb` (94,698 bytes)
+- Tooling note: cpp needs `-I <kernel>/include` (not relative); the sparse clone
+  lazily fetches dt-bindings blobs — force with
+  `git checkout HEAD -- include/dt-bindings` and add `include/uapi/linux`
+  (dt-bindings/input/linux-event-codes.h is a symlink to it).
 
-- battery icon may show "charging" while latched on battery (self-sensing; the
-  % gauge is honest) — kernel-driver patch deferred to the kernel-build phase
-- cable ADB / USB device modes need the phy port enabled → conflicts with
-  charging (documented trade-off)
-- v28: reorder service so the panel cycle runs immediately after
-  `boot_completed` (~52 s instead of 66 s)
-- performance phase: RAM/CPU/services baseline → trim for gaming
-- CPE-C391 AP test pending (`1234567890`)
+## Next (kernel side)
+- This DTB is drop-in for the andr36oid kernel build: add to
+  `arch/arm64/boot/dts/rockchip/Makefile`:
+  `dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3326-rgb10max2-android.dtb`
+- Optional early smoke test on RetroOZ: compile the same DTS against the
+  RetroOZ kernel tree (same 4.4 family), swap the DTB in the BOOT partition,
+  confirm panel/input/LED before any Android build.
 
-## Production artifacts
+## v12 (2026-11-05, after reference-image study) — HOST PAIR ENABLED
+**Discovery chain:**
+- Studied local reference: 351droid LineageOS 18.1 for RGB10 Max 2021 (kernel 4.19.172).
+  Its DTB: otg-port DISABLED, host-port okay; OTG-as-host worked via u-boot hwrev fixups.
+- andr36oid's own rk3326-odroidgo3-linux.dts (our board class, ArkOS-working Wi-Fi):
+  otg-port DISABLED, host-port okay.
+- r36s-android.dtsi (our base): otg-port okay + `rockchip,vbus-always-on` +
+  `rockchip,no-vbus-en-extcon` — the dtsi comment states the RK817 charger turns
+  otg_switch off at probe and "never ask the charger to enable its OTG boost".
+  => otg_switch-based fixes (v9..v11) could never stick; wrong bus AND deliberately
+  suppressed extcon event.
+- rk817_charger.c confirmed: probe writes OTG_EN=DISABLE to the PMIC directly
+  (line ~1632); 5V returns only via EXTCON_USB_VBUS_EN event (suppressed!).
+- In ALL previous boots usb_host0_ehci@ff340000 / usb_host0_ohci@ff350000 were
+  status=disabled — the bus the hub almost certainly hangs on was never tested.
 
-- image: `andr36oid-rgb10max2-v26.img` (4.73 GiB, md5 `206d39785f3eeb15b3d50ef571177630`)
-  — v27 service installed live on the card after imaging (vendor remount)
-- upstream: `andr36oid/andr36oid_sdflasher` PR #2, branch `rgb10max2-port`
-  (head `08f77bc` at time of writing)
+**Change:** `&usb_host0_ehci`/`&usb_host0_ohci` status okay (host-port already okay).
+Everything else identical to v9/v11 verified state.
+
+**Verified fdtget:** ehci=okay, ohci=okay, host-port=okay, otg-port=okay,
+dwc2 dr_mode=host, panel 2 lanes, buttons sw1..sw14 = 103/108/105/106/304/305/308/307/315/314/708/709/312/313.
+
+## v13 (2026-11-05, after RetroOZ/4.4 chain analysis) — THE RAIL OWNERSHIP FIX
+**Root cause (fully traced):** base dtsi sets `rockchip,no-vbus-en-extcon` on
+u2phy_otg → phy never fires EXTCON_USB_VBUS_EN → rk817 charger (whose probe
+does an unconditional OTG_EN=DISABLE field write) never re-enables otg_switch
+→ 5V to the Genesys hub dead in every boot.
+Cross-checks: 4.4 (RetroOZ) dwc2 treats phy-get -ENODEV as optional (phyless,
+u-boot-prepared port, charger+phy never touched VBUS) — that's why RetroOZ
+worked. 4.19 dwc2 also tolerates -ENODEV (backup path if extcon fails).
+regulator core: devm_regulator_get(dev,"otg_switch") resolves by NAME fallback
+(regulator_lookup_by_name) — charger has a real handle.
+**Changes vs v12:**
+- `/delete-property/ rockchip,no-vbus-en-extcon` on u2phy_otg
+- removed `regulator-always-on` from otg_switch (framework no-ops vs the
+  charger's direct register write = fake success; charger must own the rail)
+- removed `vusb_a-supply` from dwc2 (dwc2 runtime PM must never cut hub power;
+  matches the reported "wifi icon dies after ~20-30s" symptom)
+- kept: dr_mode=host, vbus-supply on phy, host pair enabled, buttons/panel
+**Diag:** charger-proof.txt captures "asks for OTG 5 V"/"OTG 5 V on" dmesg
+lines + otg_switch/boost regulator states after the role toggle.
+**Verified fdtget:** suppression gone, vbus-supply present (0x7f), always-on
+gone, vusb_a gone, ehci/ohci okay, dr_mode=host, buttons 315/314, lanes 2.
+
+## v15 (2026-11-06) — stock-replica phyless with correct probe timing
+**v14 post-mortem (from report dmesg):** dwc2 probe FAILED —
+"dwc2_core_reset: HANG! Soft Reset timeout" at 0.26s, error -16. Deleting the
+phys property made dwc2 probe BEFORE the u2phy driver enabled the UTMI clock
+(0.43s) → reset timeout → dwc2 never came up (the "usb1" in the watch was
+OHCI). The phyless CONCEPT was right; the timing was fatal. Stock 4.4 probed
+dwc2 at 9.5s, long after the phy clock was on.
+**v15 = exact stock recipe on 4.19:**
+- u2phy_otg status=disabled (phy driver skips the port; UTMI keeps u-boot state)
+- dwc2 keeps phys = <&u2phy_otg> + phy-names: phy lookup defers until the u2phy
+  provider registers (clock on), then of_phy_simple_xlate returns -ENODEV for
+  the unregistered port → dwc2 probes PHYLESS WITH CLOCK ON (verified in
+  phy-core.c: of_phy_provider_lookup + of_phy_simple_xlate)
+- vusb_a-supply = <&otg_switch> on dwc2: dwc2's lowlevel init enables it at its
+  deferred probe (~0.44s) — a real regulator write that overrides the charger's
+  probe-time kill (0.33s). Rail timeline: u-boot ON → charger kill 0.33s →
+  dwc2 re-enable 0.44s → hub powers + connects ~0.5s+
+- diag: dwc2/ehci/ohci runtime PM pinned ON (power/control=on) so nothing idles
+  the rail off; adbd TCP armed unconditionally (phone-tethering ADB path)
+**Verified fdtget:** otg-port disabled, phys=0x80, vusb_a=0x81, dr_mode=host,
+ehci/ohci okay, buttons 315/314, lanes 2.
+
+## v17 (2026-11-06) — the rail lifecycle test (post live-ADB breakthrough)
+**Live findings (adb over Wi-Fi, USB-C OTG cable to PC):**
+- PC's 5V VBUS on the OTG net → hub+dongle enumerate in ~3s, Wi-Fi works perfectly
+- Unplug → dead in <3s; replug → back in ~3s; otg_switch=disabled throughout
+- Working-state full logs captured: diag-live-working/ (dmesg+logcat)
+- Charger idle state: otg5v=0, reg_b4=0x63, boost_only_for_otg=0
+**v17 = v13 extcon chain on v16 base** (port enabled, suppression deleted,
+phy vbus-supply, managed dwc2, autosuspend off, PM pins) + diag that toggles
+the charger event early and samples reg_b4/otg5v/rail/devs every 0.5s for 3
+min. Cable-OUT boot decides: hub up = fixed; register on + hub dead = the
+board never wires otg_switch to the OTG net (hardware; workaround = 5V on
+the OTG port); register re-killed = software killer to patch.
+
+## FINAL MECHANISM (2026-11-06, live adb + register tooling)
+**The RK817 OTG rail is a PMIC-side LATCH, not a normal register:**
+- Kernel driver writes (charger OTG_EN, regulator enable, phy vbus-supply) NEVER
+  reach it — regmap cache claims "on" (reg_b4=47/otg5v=1) while raw i2c reads 07
+- One RAW i2c write of 0xB4=0x47 (with the charger driver unbound) flips the
+  latch: hub powers from battery, Wi-Fi works standalone
+- The latch SURVIVES warm reboots (PMIC stays powered) but resets on cold
+  power-off -> must be re-armed at each cold boot
+- Writing while external 5V is on the OTG net = collision -> PMIC cuts power
+  (therefore the boot ladder only pokes when the hub is NOT enumerated)
+- Charger driver can stay bound in normal daily state (latch unaffected once set);
+  unbind is only the fallback if a cold-boot poke doesn't take
+**Production v20 diag:** insmod rtl8xxxu early -> if hub absent: poke b4=47 ->
+verify -> fallback unbind/poke/rebind ladder -> ADB TCP + root daemon; OTG port
+left to normal data roles (no role toggling).
+
+## v21/v22 (2026-11-06) — production polish
+- v21 DTB: /delete-property/ dc_det_gpio on rk817 charger node -> no false
+  "charging" (DC detect pin floats high on this board; R36S base dtsi wiring).
+  USB-C charging unaffected.
+- v22 diag: radio tuning baked in — wifitool (static nl80211 helper, no libnl)
+  sets power_save off + reg MA once wlan0 exists, plus a 30s watchdog (power
+  save state resets on driver reload). Tools installed to /vendor/etc
+  (rk817tool, wifitool) with /data/local/tmp fallback.
+- Wi-Fi robustness finding: HOME-NETWORK (WPA2+TKIP mixed) associates fine;
+  disconnects were reason=34 (missing ACKs) at -76 dBm; connects solidly at
+  -62 dBm. TKIP is not the blocker; signal/ACK robustness is.
+
+## v24 (2026-11-07) — charger-aware rail (final power design)
+**Findings:**
+- charging while the console is OFF works (PMIC autonomous) — confirmed by the user
+- the dc_det gpio (gpio0 PB3) senses the shared VBUS net: a real charger OR the
+  latched OTG rail both read "present". v21's removal of dc_det disabled the
+  charge path too, so charging while running was broken and the indicator was
+  only "fixed" by disabling detection
+- the latch cannot be cleared by register writes (b4 writes not stored; only a
+  cold power-off resets it)
+- charger on the OTG port kills the hub (PMIC prioritises input, OTG output off)
+**v24 design:**
+- dc_det_gpio restored (stock ACTIVE_HIGH)
+- service reads dc_det_pin at boot: 1 = charger -> skip latch (charging works,
+  Wi-Fi off); 0 = battery -> poke latch (Wi-Fi on)
+- watcher (10s): in charging mode, dc_det 1->0 (charger removed) -> poke latch ->
+  Wi-Fi returns without reboot
+- known limit: plugging a charger while the latch is armed needs a power-off to
+  charge (the latch cannot be cleared live) — documented
+
+## v25 (2026-11-07) — confirmed shared-net model + honest battery + wifi watchdog
+**Hardware model confirmed by the user's own observations:**
+- the power-port charge input and the OTG/hub 5V net are ONE net
+- latch armed (wifi) -> own 5V on the net: PMIC reads "charger" (false icon)
+  and cannot charge from itself
+- latch off (device powered off, or boot with charger) -> charger feeds the
+  net -> charging works (the user confirmed off-state charging)
+- => charging while Wi-Fi is on is physically impossible on this board
+**v25 logic:**
+- boot: dc_det=1 AND hub down -> charging state (charger stays bound, latch not
+  armed, Wi-Fi off)
+- boot: battery -> arm latch -> wifi state; then unbind rk817-charger so the
+  false "ac online" disappears (battery gauge is a separate driver)
+- watchdog (10s): wifi state + hub down -> re-poke latch (fixes Wi-Fi not
+  returning after an OTG-port charger event)
+- watchdog: charging state + dc_det=0 (charger removed) -> arm latch -> wifi
+**Known limitation:** plugging a charger while latched needs a power-off to
+charge (latch cannot be cleared live).
+
+## v26 (2026-11-07) — THE corrected design: stock topology + latch
+**Why v24/v25 were wrong (found by re-reading our own v13 capture):**
+- with the phy port enabled, the phy fires EXTCON_USB_VBUS_EN -> the charger
+  sets otg_in=1 and **disables its plug/plug-out IRQs** ("disable_irq(
+  charge->plugin_irq)") -> plugging a charger afterwards is never detected ->
+  no charging. Stock never had this because its otg-port is disabled.
+**v26 = stock topology + our latch:**
+- u2phy_otg status=disabled (charger stays ignorant, plug detection alive)
+- dwc2 dr_mode=host, phys=<&u2phy_otg> kept: lookup defers until the u2phy is
+  up, then -ENODEV -> phyless probe with the clock running (v15 timing fix)
+- dc_det restored (charging path)
+- boot service arms the latch unconditionally, watchdog re-arms when the hub
+  loses power (30 s)
+- expectation: charging + Wi-Fi simultaneously, like stock
+
+## v26 CONFIRMED ON HARDWARE (2026-11-07)
+Live reading with the charger in the power port:
+  ac: online=1 Charging | battery: Charging 3.899 V +869 mA | usbdevs=8 | wlan=2
+=> charging and Wi-Fi run together, stock parity.
+Boot-time detail: with a charger present the charger's 5 V powers the shared
+net, so the hub enumerates before the latch is needed ("hub already up").
+On battery the boot service arms the PMIC latch instead. The charger driver is
+never told about OTG (otg-port disabled), so it keeps its plug detection and
+charges normally in both cases.
+The correct hardware model: the power-port input and the Wi-Fi hub 5 V net are
+one net, and the rk817 can both charge from the input and feed the hub; the
+earlier "mutually exclusive" conclusion was an artefact of the phy telling the
+charger about OTG (which disables its plug IRQs).
+
+## v27 (2026-11-06) — boot black screen FIXED + boot speed
+**Root cause found (live boot analysis):**
+- kernel draws the boot logo (drm_logo, freed at 11.4s) but NO vop modeset is
+  visible in the whole boot console log; on stock RetroOZ the vop enables at
+  1.4s. The Android handoff (SF/HWC taking DRM master) never enables the CRTC
+  for the Android framebuffer. DisplayManagerService keeps the display in its
+  initial "ON" state the whole boot, so nothing ever triggers a modeset.
+  screencap showed the launcher fully composed -> compositor fine, panel scanout
+  dead. First "Update mode to 480x854p60" only at 118s = the user's power-button
+  press (sleep -> wake = DPMS off -> on = modeset -> picture appears).
+**v27 fix (in the boot service, after sys.boot_completed):**
+- wait for init.svc.bootanim to leave "running" (accepts empty for nobootanim)
+- `input keyevent KEYCODE_POWER` twice, 1.5s apart -> DisplayPowerController
+  does OFF->ON -> CRTC modeset -> panel shows the launcher. Verified live:
+  automated cycle produced "Display device changed state OFF/ON" at 22:30:43/45
+- alternatives tested and rejected: fb0/blank (no DPMS on this kernel),
+  /sys/class/drm/card0-DSI-1/dpms (read-only)
+**Boot speed (baseline 2026-11-06, charger in):**
+- kernel->init 2.7s; zygote start 12.0s; preload 19.8->27.5s; PMS 31.4->35.7s;
+  ams_ready 44.4s; enable_screen 52.2s; boot_completed ~57s; bootanim done 62.9s
+- zram mkswap 731MB at ~14s (fstab zramsize=75%, fine)
+- 191 packages; /data f2fs with lazytime+noatime (fine)
+- applied: debug.sf.nobootanimation=1 in /vendor/build.prop (stock file has =0;
+  /system is erofs, not writable) -> animation tail (~6s) gone + CPU/GPU freed
+  during the heavy phase
+- /system is erofs (read-only fs, no repack attempted yet)
+- installed live on the card via adb (vendor remount rw); both verified in place
+
+## v27 CONFIRMED ON HARDWARE (2026-11-06 22:38 boot)
+- user: "its all alone i didnt touch it after the power on" — the panel comes
+  up by itself; no button press needed anymore
+- this boot vs pre-v27: enable_screen 52.2->47.7s; ready 62.9->51.1s (~12s);
+  boot_completed ~48s; screen alive ~66s (auto)
+- wake reason POWER_BUTTON from the injected keys; DisplayManager ON at
+  22:37:24.4 right at the cycle; battery charged 38->44% with Wi-Fi up
+- nobootanimation=1 active (bootanim exits instantly, ro.boottime.bootanim
+  4.65s but no rendering)
+- charging + wifi + hub all coexist (Charging, wlan0 inet, usbdevs=8)
+
+## Performance phase — baseline + first wins (2026-11-06 22:45)
+Baseline (idle, charging, launcher up):
+- RAM: 975 MB total, 60 free / 369 available; zram 731 MB with ~29 MB in it
+- CPU: 4x A35 schedutil 408-1296 MHz; GPU Mali-G31 simple_ondemand
+  available 400/480/520/600 MHz but POLICY-CAPPED at 520 (min=max=520)
+- temps: SoC 62C / GPU 61C (charging + idle), battery 18.8C
+- top RSS: system_server 173MB, daijishou 172MB RSS/61MB PSS, systemui 159/57,
+  + four cached andr36oid helper apps ~78MB RSS each
+- 51 init services running; 191 packages; 23 third-party apps
+Applied:
+- am kill-all: MemAvailable 369 -> 435 MB (+66)
+- device_config activity_manager max_cached_processes 12 (default 32)
+- vendor thermal-mock HAL disabled (rc renamed .disabled; fake data anyway;
+  real thermal is kernel soc/gpu zones) — takes effect next boot
+- GPU max_freq unlocked to 600MHz (stock-firmware proven clock; cur stays 520
+  idle, ramps under load) — LIVE-TEST PENDING in a game
+- VLC PlaybackService force-stopped (was holding 18MB PSS in background)
+RAM after: MemAvailable 442 MB.
+Pending user decision: Thorium browser 341MB / VLC 137MB / Syncthing 116MB
+on /data — removal is user's call (ROM sync via syncthing? browsing?).
+
+## v28 (2026-11-06) — background janitor + runtime perf tuning
+Service additions (all individually reversible):
+- runtime tuning re-applied each boot: vm.swappiness=100 (fallback 60),
+  mmc read_ahead_kb=512 (fallback 128), iostats=0 (fallback 1),
+  GPU max_freq 600MHz (fallback 520000000), UI animation scales 0.5 (fallback 1.0)
+- background janitor every 40s: am kill-all (cached only, safe) + force-stop
+  thorium/vlc ONLY when not the foreground activity; syncthing deliberately
+  excluded (needs to run to sync)
+- game mode scripts in /data/local/tmp: gamemode (CPU floor 1.008GHz) /
+  gamemode-off (408MHz) — tested both directions live
+Zram: comp_algorithm shows "lzo lzo-rle [lz4]" -> already lz4 (brackets =
+active), no change needed. swappiness raise is the right lever for 1GB+zram.
+v28 installed live via vendor remount; janitor applies from next boot.
+
+## v29 (2026-11-06) — L3/R3 fixed (mouse mode combo)
+**Problem:** andr36oid's L3+R3 mouse mode never launched. Live getevent showed
+the stick pushes emitting 0x2c4/0x2c5 (BTN_TRIGGER_HAPPY5/6) — our port's
+mapping of sw11/sw12. andr36oid (and the R36S base) expects real L3/R3: the
+R36S dtsi sends them as KEY_BACK/KEY_LEFTMETA (158/125) with a keylayout
+mapping them to THUMBL/THUMBR; this image has no such .kl (Generic.kl applies,
+which maps 317/318 -> BUTTON_THUMBL/THUMBR directly).
+**Fix:** sw11 -> 0x13d (BTN_THUMBL 317), sw12 -> 0x13e (BTN_THUMBR 318).
+No keylayout file needed; emulators see standard L3/R3 too.
+**Verified:** rebuilt DTB, installed LIVE into BOOT via root (mount vfat p1),
+rebooted; getevent now shows 013d/013e on stick pushes; boot clean (38s,
+panel cycle ok). Backup of the previous DTB at /data/local/tmp/dtb-backup.
+Note: /mnt is tmpfs — mountpoints created in one boot do not exist after
+reboot (this is why the post-reboot cmp printed a false "mismatch").
