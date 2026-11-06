@@ -316,3 +316,34 @@ props (none set = defaults), chord must be held ~2s, "toggle chord ignored:
 a stick is being pushed" means sticks must be centered when pressing.
 L3+R3 and SELECT+START both pressed during the window — both appear valid
 chords (settings UI offers picker).
+
+## v30 + v31 (2026-11-07) — right stick remapped, mouse mode PERFECT
+**v30:** the right stick was axis-SWAPPED: horizontal pushes fired ABS_RY, ABS_RX
+never moved. Root cause: this board's mux wiring differs from the R36S
+(mux ch0 = right-stick X, ch1 = right-stick Y; the R36S is the reverse), and the
+DT props `abs_rx_channel`/`abs_ry_channel` copied from the stock DTB are read by
+NOBODY in the andr36oid driver — it only reads `amux-channel-mapping` (axis
+order RY,RX,Y,X), defaulting to identity.
+Fix: `amux-channel-mapping = <1 0 2 3>;` (ABS_RY->ch1, ABS_RX->ch0, left stick
+unchanged). Verified: horizontal pushes now fire ABS_RX, vertical fire ABS_RY.
+**v31:** after the remap the user measured a pure 180° inversion (right->left,
+up->down). Polarity fix: `invert-absrx` back on (ch0 raw = -PX), NO
+`invert-absry` (ch1 raw = +PY) — this matches the stock DTB exactly (it had
+invert-absrx, no invert-absry; its abs_*_channel values + RetroOZ's driver were
+self-consistent all along; the props were just invisible to our kernel).
+**Result (user confirmed "perfect"):** right stick correct everywhere — mouse
+mode cursor AND emulators' camera control (which was silently swapped/inverted
+since the port began).
+**Mouse mode final config:** toggle = Select+Start chord (hold ~1s);
+pointer_stick = right stick (`persist.sys.joymouse.pointer_stick right`);
+invert_ry=false, pointer_invert_x=false (all the compensation happens in the
+kernel now). Props survive reboot; editable live or via JoyMouseSettings app.
+**Engine facts (from source, andr36oid/android_device_gameconsole_common
+joyMouse/):** native root daemon started by init at boot; scans /dev/input and
+EVIOCGRABs the pad ONLY while mouse mode is on; virtual uinput mouse
+(REL_X/Y + buttons); toggle chord default = Select+Start; pointer stick
+defaults to RIGHT when the pad has one; productDevice=="r36s" skips the
+right-Y flip other handhelds need (our board: kernel-side polarity fix instead
+so the flip stays off); "toggle chord ignored: a stick is being pushed" = chord
+needs centered sticks; config = persist.sys.joymouse.* read live (PropertyWatcher
+waits on the property serial).

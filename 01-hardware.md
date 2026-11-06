@@ -46,10 +46,35 @@ PMIC's OTG priority logic and kills the hub (Wi-Fi drops).
 
 ## Input
 
-- Joypad: `odroidgo3-joypad` node, ADC-amux analog sticks (channels explicit in
-  DTS), `invert-absrx` needed for correct X-axis on this board.
-- Face buttons/sw9/sw10: key codes 315/314 verified working.
+- Joypad: `odroidgo3-joypad` node, ADC-amux analog sticks, `invert-absrx` on
+  the right stick X (see below for the final polarity scheme), explicit amux
+  channels **replaced by `amux-channel-mapping = <1 0 2 3>`** (see below).
+- Face buttons/Start/Select: sw9=315 (Start), sw10=314 (Select) verified.
+- Stick pushes: sw11/sw12 emit **BTN_THUMBL (317) / BTN_THUMBR (318)** — real
+  L3/R3 (needed for the Select+Start-adjacent mouse-mode chords and emulators).
+- **Right-stick mux wiring differs from the R36S**: mux ch0 = right-X,
+  ch1 = right-Y (R36S is the reverse). The odroidgo3 driver reads
+  `amux-channel-mapping` (axis order RY,RX,Y,X) — set it to `<1 0 2 3>` and
+  keep `invert-absrx`, no `invert-absry`. Without this the right stick is
+  swapped and inverted in everything (mouse mode, emulators).
+- The stock `abs_rx_channel`/`abs_ry_channel` DT properties are **inert** in
+  this driver — they belong to RetroOZ's kernel and mislead if copied.
 - No touchscreen (panel is non-touch).
+
+## Mouse mode (com.gameconsole.joymouse)
+
+- Native root daemon (`/system/bin/joyMouse`), started by init at boot; watches
+  `/dev/input/event3` and **EVIOCGRABs the pad only while mouse mode is ON**
+  (that's also why getevent sees nothing while it's active).
+- Toggle: hold **Select+Start** ~1 s (the chord requires centered sticks —
+  "toggle chord ignored: a stick is being pushed").
+- Pointer = **right stick**, scroll = left stick; click mapping and per-button
+  actions configurable in the JoyMouseSettings app.
+- Config = `persist.sys.joymouse.*` properties, read live. Final state:
+  `pointer_stick=right`, `invert_ry=false`, `pointer_invert_x=false` — all
+  axis correction happens in the kernel DTS.
+- The engine skips its own right-Y flip when `ro.product.device` == "r36s"
+  (ours reports r36s); our polarity correction is therefore kernel-side.
 
 ## Battery / PMIC
 
