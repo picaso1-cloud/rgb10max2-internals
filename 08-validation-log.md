@@ -359,3 +359,17 @@ waits on the property serial).
   + janitor keep-alive; installed to /vendor live
 - Moonlight v12.1 already preinstalled (com.limelight); stack = Moonlight +
   Sunshine (PC) + Tailscale. PyroWave reference noted (Adreno/LAN-only, later).
+
+## v32 master rebuild kit (2026-11-07 01:40)
+- test card found DYING (unstable reads: same sectors differ between reads;
+  BOOT FAT corrupted: Panels/ I/O errors, top-level boot.ini/dtb lost)
+- rescued from it: userdata-full.tar (1.5GB, all apps+data from p6) +
+  essentials.tgz (tailscale auth state, pulled live earlier)
+- fresh master built from the OFFICIAL release base (andr36oid-20261024-1750)
+  via build-rgb10max2-image.sh (mtools-based BOOT rebuild after kernel-vfat
+  write flakiness corrupted a previous attempt; mtools = deterministic)
+- master: dist/andr36oid-rgb10max2-master.img md5 618f948d7055af948c362ff593433924
+  contains: v31 DTB+boot.ini patched+profiles+vendor v32 service+tools+knob
+- rebuild flow for the new card: flash master -> extend userdata to fill card
+  (delete/recreate p6 + mkfs.f2fs + restore userdata-full.tar) -> push ts
+  essentials -> boot -> connect wifi -> done (no re-login, apps intact)
