@@ -40,6 +40,7 @@ fixed by an automatic sleep/wake cycle in a boot service. Boot completes in
 | [08-validation-log.md](08-validation-log.md) | Condensed version history v9 → v32 with what each proved |
 | [09-remote-play.md](09-remote-play.md) | Moonlight + Sunshine + Tailscale: full remote Steam setup, installed and working |
 | [10-rebuild-guide.md](10-rebuild-guide.md) | SD card rebuild: card shopping, clone vs clean-rebuild paths, userdata growth, state migration |
+| [11-rocknix-rk3326-port.md](11-rocknix-rk3326-port.md) | ROCKNIX shared-core port plan: Max 2 = OGS-class board, what works out of the box, DTS/quirk work, Wi-Fi/power risks |
 | [service/](service/) | The production boot service (`diag.sh` v27 + init rc) |
 | [tools/](tools/) | `rk817tool.c` (raw PMIC i2c) and `wifitool.c` (nl80211, no libnl) |
 | [dts/](dts/) | The production Android device tree for the board |
