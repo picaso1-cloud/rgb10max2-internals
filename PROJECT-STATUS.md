@@ -140,23 +140,26 @@ the modern stack the "Arch-R" idea was after — glibc **2.44**, Mesa **26.2.4**
   (`/usr/share/armsx2-sa/armsx2-qt` + `start_armsx2.sh`), RG353V quirks
   (`/usr/lib/autostart/quirks/devices/Anbernic RG353V`).
 
-### ⚠️ Real blocker: Android/eMMC boot conflict
-ROCKNIX does **not** boot from SD while Android is on the eMMC; wiping Android
-makes it boot, reflashing Android breaks it again (documented + community-
-confirmed). ROCKNIX ships no legacy boot files for the eMMC bootloader to
-chainload; its SPL order is already SD-first. Options:
-- **A (try first)** legacy chainload: keep Android, reproduce ArkOS-style
-  legacy boot files on the ROCKNIX SD so the eMMC bootloader loads ROCKNIX's
-  `KERNEL` + DTB (kernel has embedded initramfs). SD-only, reversible; **R&D**.
-- **B** wipe eMMC → ROCKNIX (documented; Android restore = GammaOS image /
-  SDDiskTool card; one OS at a time).
-- **C** stay on GammaOS + ArkOS (PS2 stays on Android).
+### Boot model (corrected, verified behavior)
+The RG353V has **two OS modes and two SD slots**:
+- **TF1** = OS card → **boot priority**; a bootable TF1 card (Linux or Android)
+  boots directly.
+- **eMMC** = built-in OS (GammaOS Android) → boots only when TF1 has no bootable
+  OS card.
+- **TF2** = ROMs/media card only (never boots).
+
+Therefore a ROCKNIX TF1 card is expected to boot directly **with Android
+untouched on the eMMC**; removing the TF1 card boots Android again. The ROCKNIX
+wiki's "wipe Android" note is an **unverified caveat** for some units, not this
+device's normal behavior, and is not planned. No eMMC wipe / chainload is
+needed.
 
 ### Stages
-0. **Validate**: decide A/B/C → flash `dist/ROCKNIX-RK3566-Generic.img` to a
-   spare A2 SD → boot → verify panel/touch/audio/Wi-Fi/GL/ARMSX2.
-1. Capture boot chain — **offline part done**; still capture ArkOS `/boot`
-   legacy files + eMMC bootloader (read-only) for option A.
+0. **Validate** (when resumed): flash `dist/ROCKNIX-RK3566-Generic.img` to a
+   spare A2 card → put it in **TF1** → boot → verify panel/touch/audio/Wi-Fi/GL/
+   ARMSX2. Keep ROMs on the TF2 card.
+1. Capture boot chain — **done offline** (no further hardware capture needed for
+   the normal TF1 path).
 2. Arch rootfs hybrid — optional/unnecessary.
 3. Full Arch-R RK3566 port — optional, only for pacman/rolling.
 
@@ -185,10 +188,10 @@ opened #2 manually).
 ## Open decisions for the user
 
 1. **RGB10 Max 2**: new card size/class → flash master + migrate state (Project 1 step 1).
-2. **RG353V boot path (deferred, documentation-only)**: if ever pursued —
-   A) legacy chainload R&D (keep Android, SD-only), B) wipe eMMC and run
-   ROCKNIX, or C) stay on GammaOS + ArkOS. **Current choice: C / do nothing;
-   docs only.**
+2. **RG353V (deferred, documentation-only)**: if resumed, just flash the
+   ROCKNIX Generic image to a **TF1** card and boot; TF1 has OS boot priority,
+   eMMC Android is untouched, TF2 stays ROMs-only. **Current choice: do
+   nothing; docs only.**
 3. **RG353V online**: only needed if the ROCKNIX/Linux experiment is revived.
 4. Priority order: RGB10 rebuild · GammaOS remote-play; RG353V Linux stays
    documented-only.
@@ -203,7 +206,10 @@ opened #2 manually).
 - Completed the offline ROCKNIX teardown (`14-rocknix-image-analysis.md`):
   boot chain, SPL DT (SD-first), U-Boot board/panel detection, glibc/Mesa/kernel,
   ARMSX2 preinstall, RG353V quirks.
-- Found and documented the **Android/eMMC boot blocker** and the three options.
+- Documented the boot model correctly: **TF1 = OS card (boot priority), eMMC =
+  fallback Android, TF2 = ROMs only**; no eMMC wipe needed for a TF1 ROCKNIX
+  experiment. (Corrected an earlier overstatement based on an unverified wiki
+  caveat.)
 - Corrected the panel claim: unit is **v2** (ID 0x3821); mainline/u-boot/kernel
   support both v1 (0x3052) and v2.
 - No hardware was touched; both devices remain offline.
