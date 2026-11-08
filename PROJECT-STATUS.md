@@ -118,21 +118,49 @@ kit. Console currently has no working card.
 
 ---
 
-## Project 4 — Arch-R style Linux for RK3566/RG353V  🚧 planned (next big task)
+## Project 4 — Modern Linux for RK3566/RG353V (ROCKNIX)  🚧 offline Stage 1 done
 
-**Feasibility confirmed**: mainline has `rk3566-anbernic-rg353v.dts`; ROCKNIX
-already builds the RK3566 boot chain; Arch-R's board layout is
-`projects/ArchR/devices/<SoC>/`.
+**Key finding (2026-11-08)**: ROCKNIX's RK3566 **Generic** image already provides
+the modern stack the "Arch-R" idea was after — glibc **2.44**, Mesa **26.2.4**
+(panfrost + panvk), kernel **7.2.11**, **sway**, EmulationStation — and ships
+**ARMSX2 preinstalled**. Building a new Arch-R RK3566 port is therefore
+**optional** (only for pacman/rolling packages), not needed for performance.
+
+**Offline Stage 1 completed** (`14-rocknix-image-analysis.md`):
+- Correct image identified: `Generic`, *not* `Specific` (RG353V is in the
+  Generic list; Specific is X55/X35S/RG DS). Downloaded + SHA-256 verified
+  (`b573c965…c775`); wrong image deleted.
+- Boot chain captured: idbloader `RKNS` @ 32 KiB, SPL DT @ 0x36EC0
+  (SD-first order), U-Boot 2026.01 @ 8 MiB, FAT @ 16 MiB with `FDTDIR`,
+  KERNEL 7.2.11 (embedded LZO initramfs), SYSTEM squashfs, STORAGE ext4.
+- U-Boot Anbernic board code: SARADC detection (RG353V = 695) + panel ID
+  detection (0x3052 = v1 nv3051d, 0x3821 = v2). **This unit is v2** (GammaOS
+  DTB active panel ID 0x3821).
+- Userland verified: glibc 2.44, Mesa 26.2.4, sway kiosk, ES, ARMSX2
+  (`/usr/share/armsx2-sa/armsx2-qt` + `start_armsx2.sh`), RG353V quirks
+  (`/usr/lib/autostart/quirks/devices/Anbernic RG353V`).
+
+### ⚠️ Real blocker: Android/eMMC boot conflict
+ROCKNIX does **not** boot from SD while Android is on the eMMC; wiping Android
+makes it boot, reflashing Android breaks it again (documented + community-
+confirmed). ROCKNIX ships no legacy boot files for the eMMC bootloader to
+chainload; its SPL order is already SD-first. Options:
+- **A (try first)** legacy chainload: keep Android, reproduce ArkOS-style
+  legacy boot files on the ROCKNIX SD so the eMMC bootloader loads ROCKNIX's
+  `KERNEL` + DTB (kernel has embedded initramfs). SD-only, reversible; **R&D**.
+- **B** wipe eMMC → ROCKNIX (documented; Android restore = GammaOS image /
+  SDDiskTool card; one OS at a time).
+- **C** stay on GammaOS + ArkOS (PS2 stays on Android).
 
 ### Stages
-0. **Validate**: flash `dist/ROCKNIX-RK3566-Specific.img.gz` (1.36 GB, 20261101)
-   to a spare SD → boot → verify panel/touch/audio/Wi-Fi/GL (`xdg_wm_base`,
-   Mesa) → run ARMSX2 AppImage natively → test PS2 ISOs. **Needs a spare A2 SD.**
-1. Capture ROCKNIX boot chain (u-boot/DDR blobs/kernel/DTB/partitions).
-2. Arch Linux ARM rootfs on the ROCKNIX boot chain (hybrid "Arch-R for RK3566").
-3. Fork Arch-R, add `projects/ArchR/devices/RK3566/`, validate, propose upstream.
+0. **Validate**: decide A/B/C → flash `dist/ROCKNIX-RK3566-Generic.img` to a
+   spare A2 SD → boot → verify panel/touch/audio/Wi-Fi/GL/ARMSX2.
+1. Capture boot chain — **offline part done**; still capture ArkOS `/boot`
+   legacy files + eMMC bootloader (read-only) for option A.
+2. Arch rootfs hybrid — optional/unnecessary.
+3. Full Arch-R RK3566 port — optional, only for pacman/rolling.
 
-Full plan: `13-archr-rk3566-plan.md`.
+Full plan: `13-archr-rk3566-plan.md` · analysis: `14-rocknix-image-analysis.md`.
 
 ---
 
@@ -140,8 +168,8 @@ Full plan: `13-archr-rk3566-plan.md`.
 
 | Repo | State |
 |---|---|
-| `picaso1-cloud/rgb10max2-internals` | @ `d3abf32` — RGB10 Max 2 knowledge base (10 docs + artifacts) |
-| `picaso1-cloud/rg353v-internals` | @ `e095856` — RG353V knowledge base (14 docs + survey) |
+| `picaso1-cloud/rgb10max2-internals` | RGB10 Max 2 knowledge base (10 docs + artifacts); head `71412b4` before this update |
+| `picaso1-cloud/rg353v-internals` | RG353V knowledge base (15 docs + survey incl. ROCKNIX teardown); head `5e9ed6e` before this update |
 | `andr36oid/andr36oid_sdflasher` PR **#2** (`picaso1-cloud:rgb10max2-port`) | open, mergeable, head **`649dee6`** — docs + DTS + service + builder |
 | Local workspace | `/home/souhail/Andr36oid` — PORT-REPORT, VALIDATION, device-work, image-patcher, dist |
 
@@ -154,9 +182,26 @@ opened #2 manually).
 ## Open decisions for the user
 
 1. **RGB10 Max 2**: new card size/class → flash master + migrate state (Project 1 step 1).
-2. **RG353V**: spare SD for the ROCKNIX Stage-0 test?
-3. If the ArkOS SD is to be reused for ROCKNIX: back up `/roms2` (ROMs/ISOs, several GB) first?
-4. Priority order: RGB10 rebuild · RG353V ROCKNIX/Arch-R · GammaOS remote-play.
+2. **RG353V boot path**: A) legacy chainload R&D (keep Android, SD-only),
+   B) wipe eMMC and run ROCKNIX, or C) stay on GammaOS + ArkOS.
+3. **RG353V online**: needed either way — boot ArkOS to capture `/boot` +
+   eMMC bootloader (read-only) for option A, or run Stage-0 measurements after B.
+4. Priority order: RGB10 rebuild · RG353V boot decision/ROCKNIX · GammaOS remote-play.
+
+---
+
+## Latest session update (2026-11-08, post-checkpoint)
+
+- Read `PROJECT-STATUS.md`, resumed Project 4.
+- Discovered the downloaded ROCKNIX image was the **wrong variant** (`Specific`);
+  downloaded the correct **Generic** image, verified SHA-256, deleted the wrong one.
+- Completed the offline ROCKNIX teardown (`14-rocknix-image-analysis.md`):
+  boot chain, SPL DT (SD-first), U-Boot board/panel detection, glibc/Mesa/kernel,
+  ARMSX2 preinstall, RG353V quirks.
+- Found and documented the **Android/eMMC boot blocker** and the three options.
+- Corrected the panel claim: unit is **v2** (ID 0x3821); mainline/u-boot/kernel
+  support both v1 (0x3052) and v2.
+- No hardware was touched; both devices remain offline.
 
 ---
 
