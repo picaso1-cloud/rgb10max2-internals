@@ -9,6 +9,10 @@ documenting every non-obvious behavior of the board so nothing is lost.
 Everything here was **verified on real hardware** (stock RetroOZ logs, live adb
 sessions, register-level PMIC reads/writes). Where a claim is theory, it says so.
 
+> **Cross-device context:** see `MASTER-PLAN.md` (three-device strategy),
+> `SHARED-KNOWLEDGE.md` (reusable findings), `docs/DECISIONS.md`,
+> `docs/RE-METHOD.md`. This repo is the RGB10 Max 2 slice of the platform.
+
 ## The one-paragraph summary
 
 The board has **two USB-C ports** (power: charge-only, OTG: data) that share one

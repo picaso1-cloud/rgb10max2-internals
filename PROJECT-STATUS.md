@@ -1,8 +1,11 @@
 # PROJECT STATUS — Handhelds (compaction checkpoint)
 
 **Date:** 2026-11-08 · **Purpose:** complete cross-project state so context can
-be compacted and work resumed from this file alone. Mirrored in both
-`rgb10max2-internals` and `rg353v-internals` repos.
+be compacted and work resumed from this file alone. Mirrored in the device repos.
+
+> **Start here:** `MASTER-PLAN.md` (goals, shared architecture, roadmap) ·
+> `SHARED-KNOWLEDGE.md` (reusable findings) · `docs/DECISIONS.md` ·
+> `docs/RE-METHOD.md` · per-device repos below.
 
 ---
 
@@ -10,11 +13,28 @@ be compacted and work resumed from this file alone. Mirrored in both
 
 | Device | SoC | OS | Access |
 |---|---|---|---|
-| **Powkiddy RGB10 Max 2** | RK3326, 1 GB | andr36oid (Android 11) on SD | `adb connect 192.168.0.99:5555` (IP varies; also seen 192.168.31.190); root daemon via `/data/local/tmp/cmd.in`; **currently: new SD card pending** |
-| **Anbernic RG353V** | RK3566, 2 GB | **GammaOS_Lite_v1.5** (Android 12, eMMC) + **ArkOS** (SD/TF1) | Android side: wireless adb `192.168.1.148:5555` (persisted via Magisk). ArkOS side: `ssh ark@192.168.1.148`, password `ark` (sudo same). Both currently offline/other network |
+| **Powkiddy RGB10 Max 2** | RK3326, 1 GB | andr36oid (Android 11) on SD | `adb connect <ip>:5555` (192.168.0.99 / 192.168.31.190); root daemon via `/data/local/tmp/cmd.in`; **currently: new SD card pending** |
+| **Anbernic RG353V** | RK3566, 2 GB | **GammaOS_Lite_v1.5** (Android 12, eMMC) + **ArkOS** (TF1) + ROMs (TF2) | Android: wireless adb `192.168.1.148:5555` (Magisk). ArkOS: `ssh ark@192.168.1.148`, password `ark`. Both currently offline |
+| **Anbernic RG405V** | Unisoc T618, 4 GB | Stock **Android 12** (128 GB eMMC + microSD) | **not surveyed yet**; target = GammaOS Next 13/14 + andr36oid layer |
 
 Host: `/home/souhail/Andr36oid` workspace. Devices are on `192.168.x` networks
 that change between sessions — re-scan if connect fails.
+
+---
+
+## Goals (clarified 2026-11-08)
+
+- **RGB10 Max 2 (weakest, reference implementation):** two OS cards swapped in
+  its single slot — one **andr36oid Android** (upgrade to the newest *feasible*
+  Android), one **bleeding-edge Linux** (shared core, emulator-first, optimized).
+- **RG353V:** same **shared Linux core** on TF1 (patched for RK3566) while the
+  eMMC keeps Android; TF2 = ROMs. Later: automated image builder/SD flasher for
+  the community.
+- **RG405V (most powerful):** Android-only focus — **GammaOS Next (13/14)** plus
+  the andr36oid layer (speed controls, USB modes, launcher, remote play).
+- **Cross-cutting:** reuse rockchip/PMIC/input/perf/streaming/build techniques
+  across devices; document with `seen`/`inferred`/`unknown` evidence tags.
+  Full detail: `MASTER-PLAN.md`.
 
 ---
 
@@ -50,14 +70,19 @@ kit. Console currently has no working card.
   `FIRMWARE-GUIDE.md`, `OS-RESEARCH.md`, repo **rgb10max2-internals**.
 
 ### Next actions (ordered)
-1. **New SD card**: flash `dist/andr36oid-rgb10max2-master.img`
+1. **Android card — new SD**: flash `dist/andr36oid-rgb10max2-master.img`
    (md5 `618f948d7055af948c362ff593433924`) → extend userdata to fill the card
    → restore `dist/userdata-full.tar` (apps/data/wifi) → restore
    `dist/essentials.tgz` (tailscale auth into `/data/local/tmp/ts/state/`) →
    boot → verify: Wi-Fi + charging + mouse mode + tailscale (`100.x.x.x`)
    + Moonlight hosts.
-2. Gameplay test of GPU 600 MHz + `gamemode` → keep or revert.
-3. Optional: kernel patch for honest battery icon while latched; deeper
+2. **Linux card (new goal)**: bring up the shared Linux core on the Max 2
+   (ROCKNIX port — DTB/panel/input/power quirks) or validate an existing
+   RK3326 image first. Two separate cards, swapped in the single slot.
+3. Gameplay test of GPU 600 MHz + `gamemode` → keep or revert.
+4. **Android upgrade research**: newest *feasible* Android (11 → 12/13 GSI on
+   the RK3326 BSP); do not touch the stable card without a proven rollback.
+5. Optional: kernel patch for honest battery icon while latched; deeper
    performance measurement.
 
 ### Known limits (by design)
@@ -94,8 +119,11 @@ kit. Console currently has no working card.
   safest procedures documented.
 
 ### Next actions
-1. (Optional) deploy Moonlight + Tailscale on GammaOS (staged in plan).
-2. Continue when the ROCKNIX experiment (Project 4) gives data.
+1. **Linux core on TF1** (Project 4): flash ROCKNIX Generic, then port the
+   andr36oid L3 layer (perf/janitor/Tailscale/Moonlight/input).
+2. (Optional) deploy Moonlight + Tailscale on GammaOS for parity with the Max 2.
+3. Android ceiling: GammaOS 12 is stable; a 13/14 GSI is an experiment only
+   after a proven eMMC backup + rollback.
 
 ---
 
@@ -170,13 +198,35 @@ Full plan: `13-archr-rk3566-plan.md` · analysis: `14-rocknix-image-analysis.md`
 
 ---
 
+## Project 5 — RG405V: newest Android + andr36oid layer  🆕 planned
+
+**Device:** Unisoc T618, 4 GB, 128 GB eMMC, 4″ 640×480 touch, Android 12 stock
+[inferred/public]. Full profile + recon checklist: `rg405v-internals/`.
+
+- **Target OS:** **GammaOS Next v1.1** (Android 13/14 for RG405M/V/RG505)
+  [inferred] + the andr36oid tuning layer.
+- **Linux:** not planned (no mainline T618 handheld support) — investigation
+  only.
+- **First step:** read-only recon — identity, partitions, bootloader, sysfs,
+  input, thermal, battery, Treble/slots; full backup + rollback proof.
+- **Then:** install GammaOS Next, validate hardware, port the L3 layer
+  (perf floors, zram, debloat, launcher, wireless ADB, USB modes, Tailscale +
+  Moonlight, input remaps).
+- **Caution:** Anbernic warns third-party OS may block returning to stock —
+  backup first, prove rollback.
+- **Status:** not surveyed; device access/firmware version needed.
+
+---
+
 ## Repositories & upstream
 
 | Repo | State |
 |---|---|
-| `picaso1-cloud/rgb10max2-internals` | RGB10 Max 2 knowledge base (10 docs + artifacts); head `71412b4` before this update |
-| `picaso1-cloud/rg353v-internals` | RG353V knowledge base (15 docs + survey incl. ROCKNIX teardown); head `5e9ed6e` before this update |
+| `picaso1-cloud/rgb10max2-internals` | RGB10 Max 2 knowledge base (10 docs + artifacts) |
+| `picaso1-cloud/rg353v-internals` | RG353V knowledge base (15 docs + survey incl. ROCKNIX teardown) |
+| `picaso1-cloud/rg405v-internals` | RG405V knowledge base (new: goals + recon plan) — push pending |
 | `andr36oid/andr36oid_sdflasher` PR **#2** (`picaso1-cloud:rgb10max2-port`) | open, mergeable, head **`649dee6`** — docs + DTS + service + builder |
+| Shared docs (mirrored) | `MASTER-PLAN.md`, `SHARED-KNOWLEDGE.md`, `PROJECT-STATUS.md`, `docs/DECISIONS.md`, `docs/RE-METHOD.md` |
 | Local workspace | `/home/souhail/Andr36oid` — PORT-REPORT, VALIDATION, device-work, image-patcher, dist |
 
 GitHub token: fine-grained, `picaso1-cloud` (push via explicit URL form;
@@ -188,18 +238,30 @@ opened #2 manually).
 ## Open decisions for the user
 
 1. **RGB10 Max 2**: new card size/class → flash master + migrate state (Project 1 step 1).
-2. **RG353V (deferred, documentation-only)**: if resumed, just flash the
-   ROCKNIX Generic image to a **TF1** card and boot; TF1 has OS boot priority,
-   eMMC Android is untouched, TF2 stays ROMs-only. **Current choice: do
-   nothing; docs only.**
-3. **RG353V online**: only needed if the ROCKNIX/Linux experiment is revived.
-4. Priority order: RGB10 rebuild · GammaOS remote-play; RG353V Linux stays
-   documented-only.
+2. **Linux core (shared):** confirm **ROCKNIX** (recommended) vs **Arch-R**
+   (pacman/rolling) — this choice drives the Max 2 port and the RG353V image.
+   See `MASTER-PLAN.md` §3.2 and `docs/DECISIONS.md` ADR-001.
+3. **RGB10 Max 2 cards:** confirm the plan is two separate cards (Android +
+   Linux) swapped in its single slot.
+4. **Android ambition:** how far to push each device — Max 2 (11 → 12/13 GSI),
+   RG353V (12 stable; 13/14 experiment), RG405V (**GammaOS Next 13/14**).
+5. **RG405V access:** need ADB/root state, exact firmware version, and whether a
+   full backup/rollback is possible before installing GammaOS Next.
+6. **RG405V Linux:** keep as investigation-only (default) or attempt a T618
+   port (high risk, poor upstream support)?
+7. **Community release:** after the shared core is proven on two devices
+   (`docs/DECISIONS.md` ADR-007) — or earlier?
+8. **Priority order:** RGB10 rebuild → RG353V shared Linux core → RG405V recon
+   → community builder/flasher.
 
 ---
 
 ## Latest session update (2026-11-08, post-checkpoint)
 
+- **Goals clarified across all three devices** (RGB10 Max 2 / RG353V / RG405V):
+  Android + Linux strategy, shared core, cross-device reuse. Written as
+  `MASTER-PLAN.md`, `SHARED-KNOWLEDGE.md`, `docs/DECISIONS.md`,
+  `docs/RE-METHOD.md`, and a new `rg405v-internals/` knowledge base.
 - Read `PROJECT-STATUS.md`, resumed Project 4.
 - Discovered the downloaded ROCKNIX image was the **wrong variant** (`Specific`);
   downloaded the correct **Generic** image, verified SHA-256, deleted the wrong one.
@@ -212,9 +274,11 @@ opened #2 manually).
   caveat.)
 - Corrected the panel claim: unit is **v2** (ID 0x3821); mainline/u-boot/kernel
   support both v1 (0x3052) and v2.
-- No hardware was touched; both devices remain offline.
-- **User decision: documentation-only for the RG353V — nothing to flash now.**
-  Project 4 is parked as a reference; no device changes are planned.
+- No hardware was touched; all devices remain offline/not surveyed.
+- **RG353V hardware remains deferred** (documentation-only for now); the new
+  master plan defines what to do when it resumes.
+- **Next:** confirm the Linux core choice (ADR-001) + RG405V access, then
+  execute Phase 1 (RGB10 rebuild/Linux card port).
 
 ---
 
