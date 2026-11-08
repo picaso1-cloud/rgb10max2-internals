@@ -118,7 +118,7 @@ kit. Console currently has no working card.
 
 ---
 
-## Project 4 — Modern Linux for RK3566/RG353V (ROCKNIX)  🚧 offline Stage 1 done
+## Project 4 — Modern Linux for RK3566/RG353V (ROCKNIX)  📚 documented (no action planned)
 
 **Key finding (2026-11-08)**: ROCKNIX's RK3566 **Generic** image already provides
 the modern stack the "Arch-R" idea was after — glibc **2.44**, Mesa **26.2.4**
@@ -160,6 +160,9 @@ chainload; its SPL order is already SD-first. Options:
 2. Arch rootfs hybrid — optional/unnecessary.
 3. Full Arch-R RK3566 port — optional, only for pacman/rolling.
 
+**Decision (2026-11-08): documentation-only for now — nothing to flash, no
+device changes.** This remains as a reference for a future experiment.
+
 Full plan: `13-archr-rk3566-plan.md` · analysis: `14-rocknix-image-analysis.md`.
 
 ---
@@ -182,11 +185,13 @@ opened #2 manually).
 ## Open decisions for the user
 
 1. **RGB10 Max 2**: new card size/class → flash master + migrate state (Project 1 step 1).
-2. **RG353V boot path**: A) legacy chainload R&D (keep Android, SD-only),
-   B) wipe eMMC and run ROCKNIX, or C) stay on GammaOS + ArkOS.
-3. **RG353V online**: needed either way — boot ArkOS to capture `/boot` +
-   eMMC bootloader (read-only) for option A, or run Stage-0 measurements after B.
-4. Priority order: RGB10 rebuild · RG353V boot decision/ROCKNIX · GammaOS remote-play.
+2. **RG353V boot path (deferred, documentation-only)**: if ever pursued —
+   A) legacy chainload R&D (keep Android, SD-only), B) wipe eMMC and run
+   ROCKNIX, or C) stay on GammaOS + ArkOS. **Current choice: C / do nothing;
+   docs only.**
+3. **RG353V online**: only needed if the ROCKNIX/Linux experiment is revived.
+4. Priority order: RGB10 rebuild · GammaOS remote-play; RG353V Linux stays
+   documented-only.
 
 ---
 
@@ -202,6 +207,8 @@ opened #2 manually).
 - Corrected the panel claim: unit is **v2** (ID 0x3821); mainline/u-boot/kernel
   support both v1 (0x3052) and v2.
 - No hardware was touched; both devices remain offline.
+- **User decision: documentation-only for the RG353V — nothing to flash now.**
+  Project 4 is parked as a reference; no device changes are planned.
 
 ---
 
