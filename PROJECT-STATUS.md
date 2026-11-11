@@ -1,6 +1,6 @@
 # PROJECT STATUS — Handhelds (compaction checkpoint)
 
-**Date:** 2026-11-08 · **Purpose:** complete cross-project state so context can
+**Date:** 2026-11-11 · **Purpose:** complete cross-project state so context can
 be compacted and work resumed from this file alone. Mirrored in the device repos.
 
 > **Start here:** `MASTER-PLAN.md` (goals, shared architecture, roadmap) ·
@@ -13,12 +13,57 @@ be compacted and work resumed from this file alone. Mirrored in the device repos
 
 | Device | SoC | OS | Access |
 |---|---|---|---|
-| **Powkiddy RGB10 Max 2** | RK3326, 1 GB | andr36oid (Android 11) on SD | `adb connect <ip>:5555` (192.168.0.99 / 192.168.31.190); root daemon via `/data/local/tmp/cmd.in`; **currently: new SD card pending** |
+| **Powkiddy RGB10 Max 2** | RK3326, 1 GB | **andr36oid port v0.1.0** (Android 11) on a 7.5 GiB NCard | Booted and verified 2026-11-11; `adb connect <ip>:5555` (port 5555 via diag.sh); root daemon `/data/local/tmp/cmd.in` |
 | **Anbernic RG353V** | RK3566, 2 GB | **GammaOS_Lite_v1.5** (Android 12, eMMC) + **ArkOS** (TF1) + ROMs (TF2) | Android: wireless adb `192.168.1.148:5555` (Magisk). ArkOS: `ssh ark@192.168.1.148`, password `ark`. Both currently offline |
-| **Anbernic RG405V** | Unisoc T618, 4 GB | Stock **Android 12 V1.23** (116.5 GB eMMC + 128 GB microSD ROMs) | **online**: wireless ADB `192.168.1.189:43815` (paired 2026-11-08; port changes after reboot). Recon complete (`rg405v-internals/02-recon-results.md`); target = GammaOS Next Lite (Android 14) + andr36oid layer |
+| **Anbernic RG405V** | Unisoc T618, 4 GB | **GammaOS Next v1.1 Lite** (Android 14), bootloader unlocked, Magisk 29.0, no GApps | **USB ADB** `79783730379533`; wirless 5555 after reboot. Mods + tuning applied (see rg405v-internals `09-mods-and-tuning.md`) |
 
 Host: `/home/souhail/Andr36oid` workspace. Devices are on `192.168.x` networks
 that change between sessions — re-scan if connect fails.
+
+---
+
+## Current state — 2026-11-11 (session recap)
+
+### RGB10 Max 2 — andr36oid port **published (v0.1.0) and verified on hardware**
+
+- Repo: **`picaso1-cloud/rgb10max2-andr36oid`** (public) ·
+  release **`v0.1.0`**: image (1.6 GB xz / 4.8 GB raw) + 5 Go flasher binaries.
+- **Verified**: boots, setup wizard, **Wi-Fi + BT from battery**, both sticks
+  click (**L3/R3**), **L3+R3 mouse chord** works.
+- **Two boot blockers found and fixed** (documented in the repo README):
+  1. The DTB must be compiled with **`dtc -@`**; without `__symbols__` the boot
+     applies overlays and fails with a **"system failure"** message. Correct DTB
+     sha256 `8fa4e522…` (byte-identical to the proven working card).
+  2. `boot.ini` needs `usbcore.autosuspend=-1` in `bootrootfs`,
+     `androidboot.sf_orientation=ORIENTATION_270` on the `android` variable, and
+     the pre-kernel PMIC OTG poke `i2c mw 0x20 0xb4 0x47 1` before **both**
+     `booti` branches.
+- The BOOT rebuild must copy the **whole** base BOOT tree (a whitelist dropped
+  `Image/`, battery bitmaps, etc.).
+- **Card** (correction): the port used the **7.5 GiB “NCard”** from the start;
+  the **128 GB “SD16G” was not inserted this session**. NCard: full read
+  52.9 MB/s, fsck clean, backup at
+  `rgb10max2-andr36oid/build/backups/NCard-2026-11-11.img` (sha `90bbd779…`).
+- Flasher: Go tool, write + **SHA-256 read-back**; tested on the NCard (OK).
+  Removing the card mid-write aborts the image (reflash needed).
+
+### RG405V — GammaOS Next v1.1 Lite, mods applied, healthy
+
+- Android 14 / LineageOS 21, bootloader unlocked, Magisk 26.1 (app 29.0), no GApps.
+- Health: no crashes/ANRs; `performance_mode=stock` (idle 614 MHz / GPU 384 MHz,
+  ~39 °C); the only oddity is a cosmetic D-state load average (~6).
+- Mods: **mouse mode** (L1+R1+Select; right stick pointer, left scroll,
+  A=left/B=right, configurable), USB mode switcher, **USB HID gamepad**
+  (`stop usb-hal-1-1` needed; self-restore watchdog), **andr36oid Panel** APK;
+  Magisk `service.d` autostart for mouse + adb-wifi.
+- **D-pad is native** in Android Settings (Tab bridge retired: it caused 2-row
+  jumps because the hat already moved one row).
+- Touchscreen: a latched Goodix needs a **cold power-off** (reboot is not
+  enough); screen-off grabs the touch node for gestures (looks dead to getevent).
+- SD: the 128 GB card was f3-validated earlier (0 errors, 5.7 GB ROM test set);
+  it is not in use in this session.
+- **Tailscale**: never in the image (only `/data`, untouched); repo history
+  scrubbed of tailnet IPs/hostnames. No auth state anywhere in the repo.
 
 ---
 
@@ -211,49 +256,49 @@ Full plan: `13-archr-rk3566-plan.md` · analysis: `14-rocknix-image-analysis.md`
 
 ---
 
-## Project 5 — RG405V: newest Android + andr36oid layer  🔎 recon complete
+## Project 5 — RG405V: newest Android + andr36oid layer  ✅ GammaOS Next v1.1 Lite running
 
-**Device (verified live 2026-11-08):** Unisoc T618, 4 GB, **116.5 GB eMMC**,
-4″ **480×640 portrait** panel (UI 640×480 landscape), **128 GB microSD ROM
-library** (103 GB used). Stock **Android 12 V1.23**, security patch 2022-07-05,
-38 Google packages, bootloader **locked**, no usable root, SELinux **Permissive**.
-Full profile: `rg405v-internals/02-recon-results.md`.
+**Device (verified live 2026-11-08 → 2026-11-11):** Unisoc T618, 4 GB,
+**116.5 GB eMMC**, 4″ **480×640 portrait** panel (UI 640×480 landscape),
+**128 GB microSD ROM library** (103 GB used). Now running **GammaOS Next v1.1
+Lite** = Android **14 / LineageOS 21** (`lineage_arm64_bvN-userdebug
+AP2A.240905.003`), model `TrebleDroid vanilla`, **no GApps**, **Magisk 29.0**,
+SELinux Permissive, bootloader **unlocked** (`flash.locked=0`,
+`verifiedbootstate=orange`). Stock was Android 12 V1.23 (38 Google packages).
+Full stock profile: `rg405v-internals/02-recon-results.md`.
 
-- **Access:** wireless ADB `192.168.1.189:43815` (paired; port changes after
-  reboot).
-- **Target OS:** **GammaOS Next v1.1 (T618) — RG405V Lite, Android 14**
-  (fresh install, wipes internal storage) + andr36oid layer.
-- **Linux:** not planned (no mainline T618 support) — investigation only.
-- **Recon highlights:** 77 A/B partitions, dynamic `super` 5.6 GB, userdata
-  112.9 GB; schedutil 614 MHz–2.002 GHz, Mali-G52 384–850 MHz, DDR 1866 MHz;
-  `retrogame_joypad` + `touch_joypad` + Goodix touch; SC2355 SDIO Wi-Fi (5 GHz);
-  zram 2.14 GB; emulators preinstalled (AetherSX2, Dolphin, PPSSPP,
-  DuckStation, RetroArch, Citra, …).
-- **Plan:** `rg405v-internals/03-gammaos-next-plan.md` — backup `/sdcard`
-  (~4.8 GB), enable OEM unlock, unlock (wipes), fastbootd flash Lite, erase
-  userdata, validate, port L3 layer.
-- **Rollback:** GammaOS RG405V unbricker (Google Drive; Windows
-  `UpgradeDownload.exe`) — **must be verified before flashing**; no root =
-  no full eMMC dump.
-- **Installed (2026-11-08, no root):** **Daijishō 1.5.0** (32 platforms
-  imported; ROM paths pending), **Droidify 0.7.8** (F-Droid client),
-  **Shizuku-Next 14.0.33** (running, shell UID, transport adb).
-- **Performance tuning (2026-11-08, no root):** Daijishō default home, 0.5×
-  animations, Doze exemptions for 17 apps, **AOT compile** of 17 apps (all
-  Success), safe 6-package Google debloat. Reversible commands in
-  `rg405v-internals/06-optimization.md`.
-- **Prepared updates:** Cromite, Fennec, PPSSPP 1.20.4, RetroArch 1.22.2,
-  Flycast 2.7, Azahar 2126.2; details in `rg405v-internals/04-apps-and-launcher.md`.
-- **Kernel/DT deep dive (2026-11-08):** kernel **5.4.161** BSP, `/proc/config.gz`
-  readable, full running DTS recovered via sysfs, 152 modules / 282 loaded.
-  Hardware: SC2730 PMIC, **AW32257 charger**, SC2730 FGU/Type-C/vibrator,
-  generic MIPI **480×640** panel, **Goodix GT9xx** touch, `retrogame_joypad`
-  (singleadc), **SC2355 SDIO** WiFi/BT/GNSS, **Mali-G52 Gondul** 384–850 MHz.
-  Artifacts: `rg405v-internals/recon/20261108/`, doc `05-kernel-drivers-deep-dive.md`.
-- **Status:** **recon complete; decision 2026-11-08: STAY STOCK for now** —
-  no unlock, no flash, no device changes. GammaOS Next Lite plan remains ready;
-  the user has a Windows PC/VM for the unbricker when the flash is eventually
-  considered.
+- **Access:** USB ADB serial `79783730379533`; fastboot/fastbootd work.
+  Wireless ADB port changes after reboot.
+- **Bootloader unlocked 2026-11-11** with Linux `unisoc-unlock` (token + RSA
+  signature → `flashing unlock_bootloader`). Traps: 60 s confirmation window
+  (timeout still applies the unlock; retry says `can not been unlocked
+  repeatly`), OEM-unlock toggle not required, post-wipe USB debugging off /
+  MTP `1782:4001`. Runbook:
+  `rg405v-internals/07-bootloader-unlock-lock-unbrick.md`.
+- **Flash (2026-11-11, done):** archive 2,425,892,864 B, `7z t` → OK (86 files);
+  `adb reboot fastboot` → fastbootd (`is-userspace: yes`); `FlashPartitions.sh`
+  exit 0, **0 failures** (both slots + logical `system`/`vendor`; system sparse
+  transfer 175 s, ~6 min total); `EraseUserData.sh` 59.9 s. First boot: ADB in
+  40 s, `boot_completed` ~2 min. Details: `03-gammaos-next-plan.md` §6.
+- **Post-flash validated:** `/data` 110 GB (1.1 GB used), `wm size` 640×480,
+  no `com.google.android.gms`/Play Store, Magisk 29.0 present, GammaOS apps
+  (`gammapad` running, shader control, analog calibrator, joystick LED).
+- **Next steps:** device setup wizard → Magisk finish-install (adb shell still
+  uid 2000, no `su`) → new microSD + ROM library → reinstall Daijishō/emulators
+  → port andr36oid L3 layer.
+- **Rollback:** GammaOS RG405V unbricker
+  (`RG405V_UNBRICKER_SPD_Upgrade_Tool_R26.21.2801.7z`, 2.55 GB, Windows
+  `UpgradeDownload.exe`) — **still not downloaded**; rollback unproven.
+- **Historical (stock era, wiped):** Daijishō 1.5.0 + 32 platforms, Droidify
+  0.7.8, Shizuku-Next 14.0.33, and the 2026-11-08 performance tuning
+  (`rg405v-internals/06-optimization.md`) — all lost in the wipe; redo on
+  GammaOS Next.
+- **Kernel/DT deep dive (stock era):** kernel **5.4.161** BSP, full running DTS
+  via sysfs, 152 modules / 282 loaded. Hardware: SC2730 PMIC, **AW32257
+  charger**, SC2730 FGU/Type-C/vibrator, generic MIPI **480×640** panel,
+  **Goodix GT9xx** touch, `retrogame_joypad` (singleadc), **SC2355 SDIO**
+  WiFi/BT/GNSS, **Mali-G52 Gondul** 384–850 MHz. Artifacts:
+  `rg405v-internals/recon/20261108/`, doc `05-kernel-drivers-deep-dive.md`.
 
 ---
 

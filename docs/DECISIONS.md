@@ -151,3 +151,24 @@ card removed, (4) battery ≥ 50 %.
 microSD is preserved. The stock image is not recoverable from userspace (no
 root), so the unbricker is the rollback. Post-install, port the andr36oid L3
 layer only after the device is stable.
+
+## ADR-009 — Publish the RGB10 Max 2 port as an independent, unofficial repo
+
+**Status:** accepted · 2026-11-11
+
+**Context:** The port was opened as PR #2 against `andr36oid/andr36oid_sdflasher`
+and closed by the maintainer: the commits (DTS, boot/profile, service, tools) do
+not belong to the SD-flasher. The org has per-console device-tree repos
+(`r36s`, `r46h`, `r50s`, `common`) but **none for the RGB10 Max 2**, and creating
+one needs org-owner rights. The clone issue tracker is the official channel for
+new/experimental boards.
+
+**Decision:** host the port in **`picaso1-cloud/rgb10max2-andr36oid`** (public,
+GPL-3.0) with a self-contained image builder and a cross-platform flasher, and
+publish **v0.1.0** (image + binaries). Keep the `andr36oid_sdflasher` fork branch
+as the original source. Present it clearly as unofficial.
+
+**Consequences:** immediate availability and full control; no upstream
+integration, maintenance is ours. A clone-issue-tracker note can point users to
+the release. The upstream DTS can still be offered later if a device repo is
+created.

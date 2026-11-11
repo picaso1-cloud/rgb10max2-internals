@@ -13,6 +13,16 @@ sessions, register-level PMIC reads/writes). Where a claim is theory, it says so
 > `SHARED-KNOWLEDGE.md` (reusable findings), `docs/DECISIONS.md`,
 > `docs/RE-METHOD.md`. This repo is the RGB10 Max 2 slice of the platform.
 
+> **Port released (v0.1.0, 2026-11-11):** the working image, the Go flasher and
+> the device sources now live in **`picaso1-cloud/rgb10max2-andr36oid`** (public,
+> GPL-3.0): <https://github.com/picaso1-cloud/rgb10max2-andr36oid/releases>.
+> Verified on hardware: boot, setup wizard, **Wi-Fi + BT from battery**, L3/R3
+> and the L3+R3 mouse chord. This repository remains the deep hardware/port
+> knowledge base.
+>
+> **Card note:** the port card is the **7.5 GiB “NCard”**; the 128 GB “SD16G”
+> belongs to the RG405V and was not involved in this release.
+
 ## The one-paragraph summary
 
 The board has **two USB-C ports** (power: charge-only, OTG: data) that share one
